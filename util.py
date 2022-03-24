@@ -9,11 +9,15 @@ import torch
 import os.path as osp
 
 
-def make_dir(dataset):
-    if dataset == 'NTU':
-        output_dir = os.path.join('./results/NTU/')
-    elif dataset == 'NTU120':
-        output_dir = os.path.join('./results/NTU120/')
+def make_dir(dataset, directory=None):
+    if directory is not None:
+        output_dir = output_dir
+
+    else:
+        if dataset == 'NTU':
+            output_dir = os.path.join('./results/NTU/')
+        elif dataset == 'NTU120':
+            output_dir = os.path.join('./results/NTU120/')
 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)

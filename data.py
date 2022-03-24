@@ -76,7 +76,7 @@ class NTUDataLoaders(object):
                 self.metric = 'CS'
             elif self.case == 1:
                 self.metric = 'CV'
-            path = osp.join('./data/ntu', 'NTU_' + self.metric)
+            path = osp.join('./_data/ntu_sgn/processed_data', 'NTU_' + self.metric)
 
         with open(path + '_train.pkl', 'rb') as fr:
             self.train_X = pickle.load(fr)

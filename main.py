@@ -50,6 +50,7 @@ parser.set_defaults(
     print_freq=20,
     train=0,
     seg=20,
+    output_dir='./_data/ntu_sgn/results/220324170001'
 )
 args = parser.parse_args()
 
