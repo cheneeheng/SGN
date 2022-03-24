@@ -7,7 +7,8 @@ import pickle
 import logging
 
 
-def get_raw_bodies_data(skes_path, ske_name, frames_drop_skes, frames_drop_logger):
+def get_raw_bodies_data(skes_path, ske_name, frames_drop_skes,
+                        frames_drop_logger):
     """
     Get raw bodies data from a skeleton sequence.
 
@@ -26,7 +27,7 @@ def get_raw_bodies_data(skes_path, ske_name, frames_drop_skes, frames_drop_logge
     ske_file = osp.join(skes_path, ske_name + '.skeleton')
     assert osp.exists(ske_file), 'Error: Skeleton file %s not found' % ske_file
     # Read all data from .skeleton file into a list (in string format)
-    print('Reading data from %s' % ske_file[-29:])
+    # print('Reading data from %s' % ske_file[-29:])
     with open(ske_file, 'r') as fr:
         str_data = fr.readlines()
 
@@ -63,32 +64,40 @@ def get_raw_bodies_data(skes_path, ske_name, frames_drop_skes, frames_drop_logge
             if bodyID not in bodies_data:  # Add a new body's data
                 body_data = dict()
                 body_data['joints'] = joints[b]  # ndarray: (25, 3)
-                body_data['colors'] = colors[b, np.newaxis]  # ndarray: (1, 25, 2)
-                body_data['interval'] = [valid_frames]  # the index of the first frame
+                # ndarray: (1, 25, 2)
+                body_data['colors'] = colors[b, np.newaxis]
+                # the index of the first frame
+                body_data['interval'] = [valid_frames]
             else:  # Update an already existed body's data
                 body_data = bodies_data[bodyID]
                 # Stack each body's data of each frame along the frame order
-                body_data['joints'] = np.vstack((body_data['joints'], joints[b]))
-                body_data['colors'] = np.vstack((body_data['colors'], colors[b, np.newaxis]))
+                body_data['joints'] = np.vstack(
+                    (body_data['joints'], joints[b]))
+                body_data['colors'] = np.vstack(
+                    (body_data['colors'], colors[b, np.newaxis]))
                 pre_frame_idx = body_data['interval'][-1]
-                body_data['interval'].append(pre_frame_idx + 1)  # add a new frame index
+                body_data['interval'].append(
+                    pre_frame_idx + 1)  # add a new frame index
 
             bodies_data[bodyID] = body_data  # Update bodies_data
 
     num_frames_drop = len(frames_drop)
     assert num_frames_drop < num_frames, \
-        'Error: All frames data (%d) of %s is missing or lost' % (num_frames, ske_name)
+        'Error: All frames data (%d) of %s is missing or lost' % (
+            num_frames, ske_name)
     if num_frames_drop > 0:
-        frames_drop_skes[ske_name] = np.array(frames_drop, dtype=np.int)
-        frames_drop_logger.info('{}: {} frames missed: {}\n'.format(ske_name, num_frames_drop,
-                                                                    frames_drop))
+        frames_drop_skes[ske_name] = np.array(frames_drop, dtype=int)
+        frames_drop_logger.info('{}: {} frames missed: {}\n'.format(
+            ske_name, num_frames_drop, frames_drop))
 
     # Calculate motion (only for the sequence with 2 or more bodyIDs)
     if len(bodies_data) > 1:
         for body_data in bodies_data.values():
             body_data['motion'] = np.sum(np.var(body_data['joints'], axis=0))
 
-    return {'name': ske_name, 'data': bodies_data, 'num_frames': num_frames - num_frames_drop}
+    return {'name': ske_name,
+            'data': bodies_data,
+            'num_frames': num_frames - num_frames_drop}
 
 
 def get_raw_skes_data():
@@ -102,7 +111,8 @@ def get_raw_skes_data():
     #
     # frames_drop_logger = logging.getLogger('frames_drop')
     # frames_drop_logger.setLevel(logging.INFO)
-    # frames_drop_logger.addHandler(logging.FileHandler(osp.join(save_path, 'frames_drop.log')))
+    # frames_drop_logger.addHandler(
+    #     logging.FileHandler(osp.join(save_path, 'frames_drop.log')))
     # frames_drop_skes = dict()
 
     skes_name = np.loadtxt(skes_name_file, dtype=str)
@@ -111,19 +121,21 @@ def get_raw_skes_data():
     print('Found %d available skeleton files.' % num_files)
 
     raw_skes_data = []
-    frames_cnt = np.zeros(num_files, dtype=np.int)
+    frames_cnt = np.zeros(num_files, dtype=int)
 
     for (idx, ske_name) in enumerate(skes_name):
-        bodies_data = get_raw_bodies_data(skes_path, ske_name, frames_drop_skes, frames_drop_logger)
+        bodies_data = get_raw_bodies_data(
+            skes_path, ske_name, frames_drop_skes, frames_drop_logger)
         raw_skes_data.append(bodies_data)
         frames_cnt[idx] = bodies_data['num_frames']
         if (idx + 1) % 1000 == 0:
-            print('Processed: %.2f%% (%d / %d)' % \
+            print('Processed: %.2f%% (%d / %d)' %
                   (100.0 * (idx + 1) / num_files, idx + 1, num_files))
 
     with open(save_data_pkl, 'wb') as fw:
         pickle.dump(raw_skes_data, fw, pickle.HIGHEST_PROTOCOL)
-    np.savetxt(osp.join(save_path, 'raw_data', 'frames_cnt.txt'), frames_cnt, fmt='%d')
+    np.savetxt(osp.join(save_path, 'raw_data',
+               'frames_cnt.txt'), frames_cnt, fmt='%d')
 
     print('Saved raw bodies data into %s' % save_data_pkl)
     print('Total frames: %d' % np.sum(frames_cnt))
@@ -131,10 +143,11 @@ def get_raw_skes_data():
     with open(frames_drop_pkl, 'wb') as fw:
         pickle.dump(frames_drop_skes, fw, pickle.HIGHEST_PROTOCOL)
 
+
 if __name__ == '__main__':
     save_path = './'
 
-    skes_path = './nturgb+d_skeletons/'
+    skes_path = '../../_data/data/nturgbd_raw/nturgb+d_skeletons/'
     stat_path = osp.join(save_path, 'statistics')
     if not osp.exists('./raw_data'):
         os.makedirs('./raw_data')
@@ -145,11 +158,11 @@ if __name__ == '__main__':
 
     frames_drop_logger = logging.getLogger('frames_drop')
     frames_drop_logger.setLevel(logging.INFO)
-    frames_drop_logger.addHandler(logging.FileHandler(osp.join(save_path, 'raw_data', 'frames_drop.log')))
+    frames_drop_logger.addHandler(logging.FileHandler(
+        osp.join(save_path, 'raw_data', 'frames_drop.log')))
     frames_drop_skes = dict()
 
     get_raw_skes_data()
 
     with open(frames_drop_pkl, 'wb') as fw:
         pickle.dump(frames_drop_skes, fw, pickle.HIGHEST_PROTOCOL)
-        

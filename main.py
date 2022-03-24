@@ -4,12 +4,11 @@ import argparse
 import time
 import shutil
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = '1'
+# os.environ["CUDA_VISIBLE_DEVICES"] = '1'
 import os.path as osp
 import csv
 import numpy as np
-
-np.random.seed(1337)
+import random
 
 import torch
 import torch.nn as nn
@@ -20,12 +19,27 @@ from data import NTUDataLoaders, AverageMeter
 import fit
 from util import make_dir, get_num_classes
 
-parser = argparse.ArgumentParser(description='Skeleton-Based Action Recgnition')
+
+seed = 1337
+# np.random.seed(seed)
+os.environ['PYTHONHASHSEED'] = str(seed)
+torch.cuda.manual_seed_all(seed)
+torch.manual_seed(seed)
+np.random.seed(seed)
+random.seed(seed)
+# torch.backends.cudnn.enabled = False
+torch.backends.cudnn.deterministic = True
+torch.backends.cudnn.benchmark = False
+# torch.use_deterministic_algorithms(True)
+
+
+parser = argparse.ArgumentParser(
+    description='Skeleton-Based Action Recgnition')
 fit.add_fit_args(parser)
 parser.set_defaults(
     network='SGN',
-    dataset = 'NTU',
-    case = 0,
+    dataset='NTU',
+    case=0,
     batch_size=64,
     max_epochs=120,
     monitor='val_acc',
@@ -33,11 +47,12 @@ parser.set_defaults(
     weight_decay=0.0001,
     lr_factor=0.1,
     workers=16,
-    print_freq = 20,
-    train = 0,
-    seg = 20,
-    )
+    print_freq=20,
+    train=0,
+    seg=20,
+)
 args = parser.parse_args()
+
 
 def main():
 
@@ -54,7 +69,8 @@ def main():
         model = model.cuda()
 
     criterion = LabelSmoothingLoss(args.num_classes, smoothing=0.1).cuda()
-    optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=args.weight_decay)
+    optimizer = optim.Adam(model.parameters(), lr=args.lr,
+                           weight_decay=args.weight_decay)
 
     if args.monitor == 'val_acc':
         mode = 'max'
@@ -75,10 +91,10 @@ def main():
     train_size = ntu_loaders.get_train_size()
     val_size = ntu_loaders.get_val_size()
 
-
     test_loader = ntu_loaders.get_test_loader(32, args.workers)
 
-    print('Train on %d samples, validate on %d samples' % (train_size, val_size))
+    print('Train on %d samples, validate on %d samples' %
+          (train_size, val_size))
 
     best_epoch = 0
     output_dir = make_dir(args.dataset)
@@ -92,34 +108,35 @@ def main():
     csv_file = osp.join(save_path, '%s_log.csv' % args.case)
     log_res = list()
 
-    lable_path = osp.join(save_path, '%s_lable.txt'% args.case)
+    lable_path = osp.join(save_path, '%s_lable.txt' % args.case)
     pred_path = osp.join(save_path, '%s_pred.txt' % args.case)
 
     # Training
-    if args.train ==1:
+    if args.train == 1:
         for epoch in range(args.start_epoch, args.max_epochs):
 
             print(epoch, optimizer.param_groups[0]['lr'])
 
             t_start = time.time()
-            train_loss, train_acc = train(train_loader, model, criterion, optimizer, epoch)
+            train_loss, train_acc = train(
+                train_loader, model, criterion, optimizer, epoch)
             val_loss, val_acc = validate(val_loader, model, criterion)
-            log_res += [[train_loss, train_acc.cpu().numpy(),\
+            log_res += [[train_loss, train_acc.cpu().numpy(),
                          val_loss, val_acc.cpu().numpy()]]
 
             print('Epoch-{:<3d} {:.1f}s\t'
-                  'Train: loss {:.4f}\taccu {:.4f}\tValid: loss {:.4f}\taccu {:.4f}'
-                  .format(epoch + 1, time.time() - t_start, train_loss, train_acc, val_loss, val_acc))
+                  'Train: loss {:.4f}\taccu {:.4f}\tValid: loss {:.4f}\taccu {:.4f}'  # noqa
+                  .format(epoch + 1, time.time() - t_start, train_loss, train_acc, val_loss, val_acc))  # noqa
 
             current = val_loss if mode == 'min' else val_acc
 
-            ####### store tensor in cpu
+            # store tensor in cpu
             current = current.cpu()
 
             if monitor_op(current, best):
                 print('Epoch %d: %s %sd from %.4f to %.4f, '
                       'saving model to %s'
-                      % (epoch + 1, args.monitor, str_op, best, current, checkpoint))
+                      % (epoch + 1, args.monitor, str_op, best, current, checkpoint))  # noqa
                 best = current
                 best_epoch = epoch + 1
                 save_checkpoint({
@@ -131,7 +148,8 @@ def main():
                 }, checkpoint)
                 earlystop_cnt = 0
             else:
-                print('Epoch %d: %s did not %s' % (epoch + 1, args.monitor, str_op))
+                print('Epoch %d: %s did not %s' %
+                      (epoch + 1, args.monitor, str_op))
                 earlystop_cnt += 1
 
             scheduler.step()
@@ -143,7 +161,7 @@ def main():
             cw.writerows(log_res)
         print('Save train and validation log into into %s' % csv_file)
 
-    ### Test
+    # Test
     args.train = 0
     model = SGN(args.num_classes, args.dataset, args.seg, args)
     model = model.cuda()
@@ -158,7 +176,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
     for i, (inputs, target) in enumerate(train_loader):
 
         output = model(inputs.cuda())
-        target = target.cuda(async = True)
+        target = target.cuda(non_blocking=True)
         loss = criterion(output, target)
 
         # measure accuracy and record loss
@@ -175,7 +193,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
             print('Epoch-{:<3d} {:3d} batches\t'
                   'loss {loss.val:.4f} ({loss.avg:.4f})\t'
                   'accu {acc.val:.3f} ({acc.avg:.3f})'.format(
-                   epoch + 1, i + 1, loss=losses, acc=acces))
+                      epoch + 1, i + 1, loss=losses, acc=acces))
 
     return losses.avg, acces.avg
 
@@ -188,7 +206,7 @@ def validate(val_loader, model, criterion):
     for i, (inputs, target) in enumerate(val_loader):
         with torch.no_grad():
             output = model(inputs.cuda())
-        target = target.cuda(async=True)
+        target = target.cuda(non_blocking=True)
         with torch.no_grad():
             loss = criterion(output, target)
 
@@ -213,15 +231,15 @@ def test(test_loader, model, checkpoint, lable_path, pred_path):
     for i, (inputs, target) in enumerate(test_loader):
         with torch.no_grad():
             output = model(inputs.cuda())
-            output = output.view((-1, inputs.size(0)//target.size(0), output.size(1)))
+            output = output.view(
+                (-1, inputs.size(0)//target.size(0), output.size(1)))
             output = output.mean(1)
 
         label_output.append(target.cpu().numpy())
         pred_output.append(output.cpu().numpy())
 
-        acc = accuracy(output.data, target.cuda(async=True))
+        acc = accuracy(output.data, target.cuda(non_blocking=True))
         acces.update(acc[0], inputs.size(0))
-
 
     label_output = np.concatenate(label_output, axis=0)
     np.savetxt(lable_path, label_output, fmt='%d')
@@ -241,19 +259,22 @@ def accuracy(output, target):
 
     return correct.mul_(100.0 / batch_size)
 
+
 def save_checkpoint(state, filename='checkpoint.pth.tar', is_best=False):
     torch.save(state, filename)
     if is_best:
         shutil.copyfile(filename, 'model_best.pth.tar')
 
+
 def get_n_params(model):
-    pp=0
+    pp = 0
     for p in list(model.parameters()):
-        nn=1
+        nn = 1
         for s in list(p.size()):
             nn = nn*s
         pp += nn
     return pp
+
 
 class LabelSmoothingLoss(nn.Module):
     def __init__(self, classes, smoothing=0.0, dim=-1):
@@ -271,6 +292,6 @@ class LabelSmoothingLoss(nn.Module):
             true_dist.scatter_(1, target.data.unsqueeze(1), self.confidence)
         return torch.mean(torch.sum(-true_dist * pred, dim=self.dim))
 
+
 if __name__ == '__main__':
     main()
-    

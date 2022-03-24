@@ -394,7 +394,7 @@ def get_raw_denoised_data():
 
     for (idx, bodies_data) in enumerate(raw_skes_data):
         ske_name = bodies_data['name']
-        print('Processing %s' % ske_name)
+        # print('Processing %s' % ske_name)
         num_bodies = len(bodies_data['data'])
 
         if num_bodies == 1:  # only 1 actor
@@ -425,7 +425,7 @@ def get_raw_denoised_data():
     with open(raw_skes_colors_pkl, 'wb') as f:
         pickle.dump(raw_denoised_colors, f, pickle.HIGHEST_PROTOCOL)
 
-    frames_cnt = np.array(frames_cnt, dtype=np.int)
+    frames_cnt = np.array(frames_cnt, dtype=int)
     np.savetxt(osp.join(save_path, 'frames_cnt.txt'), frames_cnt, fmt='%d')
 
     print('Saved raw denoised positions of {} frames into {}'.format(np.sum(frames_cnt),

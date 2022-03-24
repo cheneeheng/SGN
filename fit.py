@@ -37,4 +37,3 @@ def add_fit_args(parser):
     args.add_argument('--seg', type=int, default=20,
                       help='number of segmentation')
     return args
-

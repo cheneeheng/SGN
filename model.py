@@ -4,8 +4,9 @@ from torch import nn
 import torch
 import math
 
+
 class SGN(nn.Module):
-    def __init__(self, num_classes, dataset, seg, args, bias = True):
+    def __init__(self, num_classes, dataset, seg, args, bias=True):
         super(SGN, self).__init__()
 
         self.dim1 = 256
@@ -45,23 +46,23 @@ class SGN(nn.Module):
         nn.init.constant_(self.gcn2.w.cnn.weight, 0)
         nn.init.constant_(self.gcn3.w.cnn.weight, 0)
 
-
     def forward(self, input):
-        
+
         # Dynamic Representation
         bs, step, dim = input.size()
-        num_joints = dim //3
+        num_joints = dim // 3
         input = input.view((bs, step, num_joints, 3))
         input = input.permute(0, 3, 2, 1).contiguous()
         dif = input[:, :, :, 1:] - input[:, :, :, 0:-1]
-        dif = torch.cat([dif.new(bs, dif.size(1), num_joints, 1).zero_(), dif], dim=-1)
+        dif = torch.cat(
+            [dif.new(bs, dif.size(1), num_joints, 1).zero_(), dif], dim=-1)
         pos = self.joint_embed(input)
         tem1 = self.tem_embed(self.tem)
         spa1 = self.spa_embed(self.spa)
         dif = self.dif_embed(dif)
         dy = pos + dif
         # Joint-level Module
-        input= torch.cat([dy, spa1], 1)
+        input = torch.cat([dy, spa1], 1)
         g = self.compute_g1(input)
         input = self.gcn1(input, g)
         input = self.gcn2(input, g)
@@ -89,11 +90,12 @@ class SGN(nn.Module):
 
         return y_onehot
 
+
 class norm_data(nn.Module):
-    def __init__(self, dim= 64):
+    def __init__(self, dim=64):
         super(norm_data, self).__init__()
 
-        self.bn = nn.BatchNorm1d(dim* 25)
+        self.bn = nn.BatchNorm1d(dim * 25)
 
     def forward(self, x):
         bs, c, num_joints, step = x.size()
@@ -102,8 +104,9 @@ class norm_data(nn.Module):
         x = x.view(bs, -1, num_joints, step).contiguous()
         return x
 
+
 class embed(nn.Module):
-    def __init__(self, dim = 3, dim1 = 128, norm = True, bias = False):
+    def __init__(self, dim=3, dim1=128, norm=True, bias=False):
         super(embed, self).__init__()
 
         if norm:
@@ -126,8 +129,9 @@ class embed(nn.Module):
         x = self.cnn(x)
         return x
 
+
 class cnn1x1(nn.Module):
-    def __init__(self, dim1 = 3, dim2 =3, bias = True):
+    def __init__(self, dim1=3, dim2=3, bias=True):
         super(cnn1x1, self).__init__()
         self.cnn = nn.Conv2d(dim1, dim2, kernel_size=1, bias=bias)
 
@@ -135,11 +139,13 @@ class cnn1x1(nn.Module):
         x = self.cnn(x)
         return x
 
+
 class local(nn.Module):
-    def __init__(self, dim1 = 3, dim2 = 3, bias = False):
+    def __init__(self, dim1=3, dim2=3, bias=False):
         super(local, self).__init__()
         self.maxpool = nn.AdaptiveMaxPool2d((1, 20))
-        self.cnn1 = nn.Conv2d(dim1, dim1, kernel_size=(1, 3), padding=(0, 1), bias=bias)
+        self.cnn1 = nn.Conv2d(dim1, dim1, kernel_size=(
+            1, 3), padding=(0, 1), bias=bias)
         self.bn1 = nn.BatchNorm2d(dim1)
         self.relu = nn.ReLU()
         self.cnn2 = nn.Conv2d(dim1, dim2, kernel_size=1, bias=bias)
@@ -158,14 +164,14 @@ class local(nn.Module):
 
         return x
 
+
 class gcn_spa(nn.Module):
-    def __init__(self, in_feature, out_feature, bias = False):
+    def __init__(self, in_feature, out_feature, bias=False):
         super(gcn_spa, self).__init__()
         self.bn = nn.BatchNorm2d(out_feature)
         self.relu = nn.ReLU()
         self.w = cnn1x1(in_feature, out_feature, bias=False)
         self.w1 = cnn1x1(in_feature, out_feature, bias=bias)
-
 
     def forward(self, x1, g):
         x = x1.permute(0, 3, 2, 1).contiguous()
@@ -175,8 +181,9 @@ class gcn_spa(nn.Module):
         x = self.relu(self.bn(x))
         return x
 
+
 class compute_g_spa(nn.Module):
-    def __init__(self, dim1 = 64 *3, dim2 = 64*3, bias = False):
+    def __init__(self, dim1=64 * 3, dim2=64*3, bias=False):
         super(compute_g_spa, self).__init__()
         self.dim1 = dim1
         self.dim2 = dim2
@@ -191,4 +198,3 @@ class compute_g_spa(nn.Module):
         g3 = g1.matmul(g2)
         g = self.softmax(g3)
         return g
-    

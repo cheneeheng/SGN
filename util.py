@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch
 import os.path as osp
 
+
 def make_dir(dataset):
     if dataset == 'NTU':
         output_dir = os.path.join('./results/NTU/')
@@ -19,10 +20,9 @@ def make_dir(dataset):
 
     return output_dir
 
+
 def get_num_classes(dataset):
     if dataset == 'NTU':
         return 60
     elif dataset == 'NTU120':
         return 120
-
-    

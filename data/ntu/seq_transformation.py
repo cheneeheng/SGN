@@ -5,8 +5,8 @@ import os.path as osp
 import numpy as np
 import pickle
 import logging
-import h5py
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 
 root_path = './'
 stat_path = osp.join(root_path, 'statistics')
@@ -21,7 +21,7 @@ denoised_path = osp.join(root_path, 'denoised_data')
 raw_skes_joints_pkl = osp.join(denoised_path, 'raw_denoised_joints.pkl')
 frames_file = osp.join(denoised_path, 'frames_cnt.txt')
 
-save_path = './'
+save_path = './processed_data/'
 
 
 if not osp.exists(save_path):
@@ -37,12 +37,14 @@ def remove_nan_frames(ske_name, ske_joints, nan_logger):
             valid_frames.append(f)
         else:
             nan_indices = np.where(np.isnan(ske_joints[f]))[0]
-            nan_logger.info('{}\t{:^5}\t{}'.format(ske_name, f + 1, nan_indices))
+            nan_logger.info('{}\t{:^5}\t{}'.format(
+                ske_name, f + 1, nan_indices))
 
     return ske_joints[valid_frames]
 
+
 def seq_translation(skes_joints):
-    for idx, ske_joints in enumerate(skes_joints):
+    for idx, ske_joints in enumerate(tqdm(skes_joints)):
         num_frames = ske_joints.shape[0]
         num_bodies = 1 if ske_joints.shape[1] == 75 else 2
         if num_bodies == 2:
@@ -66,10 +68,12 @@ def seq_translation(skes_joints):
                 ske_joints[f] -= np.tile(origin, 50)
 
         if (num_bodies == 2) and (cnt1 > 0):
-            ske_joints[missing_frames_1, :75] = np.zeros((cnt1, 75), dtype=np.float32)
+            ske_joints[missing_frames_1, :75] = np.zeros(
+                (cnt1, 75), dtype=np.float32)
 
         if (num_bodies == 2) and (cnt2 > 0):
-            ske_joints[missing_frames_2, 75:] = np.zeros((cnt2, 75), dtype=np.float32)
+            ske_joints[missing_frames_2, 75:] = np.zeros(
+                (cnt2, 75), dtype=np.float32)
 
         skes_joints[idx] = ske_joints  # Update
 
@@ -84,19 +88,22 @@ def frame_translation(skes_joints, skes_name, frames_cnt):
 
     for idx, ske_joints in enumerate(skes_joints):
         num_frames = ske_joints.shape[0]
-        # Calculate the distance between spine base (joint-1) and spine (joint-21)
+        # Calculate the distance between
+        # spine base (joint-1) and spine (joint-21)
         j1 = ske_joints[:, 0:3]
         j21 = ske_joints[:, 60:63]
         dist = np.sqrt(((j1 - j21) ** 2).sum(axis=1))
 
         for f in range(num_frames):
-            origin = ske_joints[f, 3:6]  # new origin: middle of the spine (joint-2)
+            # new origin: middle of the spine (joint-2)
+            origin = ske_joints[f, 3:6]
             if (ske_joints[f, 75:] == 0).all():
-                ske_joints[f, :75] = (ske_joints[f, :75] - np.tile(origin, 25)) / \
-                                      dist[f] + np.tile(origin, 25)
+                ske_joints[f, :75] = (
+                    ske_joints[f, :75] - np.tile(origin, 25)) / \
+                    dist[f] + np.tile(origin, 25)
             else:
-                ske_joints[f] = (ske_joints[f] - np.tile(origin, 50)) / \
-                                 dist[f] + np.tile(origin, 50)
+                ske_joints[f] = (ske_joints[f] - np.tile(origin, 50)
+                                 ) / dist[f] + np.tile(origin, 50)
 
         ske_name = skes_name[idx]
         ske_joints = remove_nan_frames(ske_name, ske_joints, nan_logger)
@@ -113,14 +120,15 @@ def align_frames(skes_joints, frames_cnt):
     """
     num_skes = len(skes_joints)
     max_num_frames = frames_cnt.max()  # 300
-    aligned_skes_joints = np.zeros((num_skes, max_num_frames, 150), dtype=np.float32)
+    aligned_skes_joints = np.zeros(
+        (num_skes, max_num_frames, 150), dtype=np.float32)
 
-    for idx, ske_joints in enumerate(skes_joints):
+    for idx, ske_joints in enumerate(tqdm(skes_joints)):
         num_frames = ske_joints.shape[0]
         num_bodies = 1 if ske_joints.shape[1] == 75 else 2
         if num_bodies == 1:
-            aligned_skes_joints[idx, :num_frames] = np.hstack((ske_joints,
-                                                               np.zeros_like(ske_joints)))
+            aligned_skes_joints[idx, :num_frames] = np.hstack(
+                (ske_joints, np.zeros_like(ske_joints)))
         else:
             aligned_skes_joints[idx, :num_frames] = ske_joints
 
@@ -138,12 +146,15 @@ def one_hot_vector(labels):
 
 def split_train_val(train_indices, method='sklearn', ratio=0.05):
     """
-    Get validation set by splitting data randomly from training set with two methods.
-    In fact, I thought these two methods are equal as they got the same performance.
+    Get validation set by splitting data randomly from training set
+    with two methods.
+    In fact, I thought these two methods are equal as they got the
+    same performance.
 
     """
     if method == 'sklearn':
-        return train_test_split(train_indices, test_size=ratio, random_state=10000)
+        return train_test_split(train_indices, test_size=ratio,
+                                random_state=10000)
     else:
         np.random.seed(10000)
         np.random.shuffle(train_indices)
@@ -164,22 +175,37 @@ def split_dataset(skes_joints, label, performer, camera, evaluation, save_path):
     val_labels = label[val_indices]
     test_labels = label[test_indices]
 
-    # Save data into a .h5 file
-    h5file = h5py.File(osp.join(save_path, 'NTU_%s.h5' % (evaluation)), 'w')
-    # Training set
-    h5file.create_dataset('x', data=skes_joints[train_indices])
-    train_one_hot_labels = one_hot_vector(train_labels)
-    h5file.create_dataset('y', data=train_one_hot_labels)
-    # Validation set
-    h5file.create_dataset('valid_x', data=skes_joints[val_indices])
-    val_one_hot_labels = one_hot_vector(val_labels)
-    h5file.create_dataset('valid_y', data=val_one_hot_labels)
-    # Test set
-    h5file.create_dataset('test_x', data=skes_joints[test_indices])
-    test_one_hot_labels = one_hot_vector(test_labels)
-    h5file.create_dataset('test_y', data=test_one_hot_labels)
+    with open(osp.join(save_path, f'NTU_{evaluation}_train.pkl'), 'wb') as fw:
+        pickle.dump(skes_joints[train_indices], fw, pickle.HIGHEST_PROTOCOL)
+    with open(osp.join(save_path, f'NTU_{evaluation}_train_label.pkl'), 'wb') as fw:  # noqa
+        pickle.dump(train_labels, fw, pickle.HIGHEST_PROTOCOL)
 
-    h5file.close()
+    with open(osp.join(save_path, f'NTU_{evaluation}_val.pkl'), 'wb') as fw:
+        pickle.dump(skes_joints[val_indices], fw, pickle.HIGHEST_PROTOCOL)
+    with open(osp.join(save_path, f'NTU_{evaluation}_val_label.pkl'), 'wb') as fw:  # noqa
+        pickle.dump(val_labels, fw, pickle.HIGHEST_PROTOCOL)
+
+    with open(osp.join(save_path, f'NTU_{evaluation}_test.pkl'), 'wb') as fw:
+        pickle.dump(skes_joints[test_indices], fw, pickle.HIGHEST_PROTOCOL)
+    with open(osp.join(save_path, f'NTU_{evaluation}_test_label.pkl'), 'wb') as fw:  # noqa
+        pickle.dump(test_labels, fw, pickle.HIGHEST_PROTOCOL)
+
+    # # Save data into a .h5 file
+    # h5file = h5py.File(osp.join(save_path, 'NTU_%s.h5' % (evaluation)), 'w')
+    # # Training set
+    # h5file.create_dataset('x', data=skes_joints[train_indices])
+    # train_one_hot_labels = one_hot_vector(train_labels)
+    # h5file.create_dataset('y', data=train_one_hot_labels)
+    # # Validation set
+    # h5file.create_dataset('valid_x', data=skes_joints[val_indices])
+    # val_one_hot_labels = one_hot_vector(val_labels)
+    # h5file.create_dataset('valid_y', data=val_one_hot_labels)
+    # # Test set
+    # h5file.create_dataset('test_x', data=skes_joints[test_indices])
+    # test_one_hot_labels = one_hot_vector(test_labels)
+    # h5file.create_dataset('test_y', data=test_one_hot_labels)
+
+    # h5file.close()
 
 
 def get_indices(performer, camera, evaluation='CS'):
@@ -195,42 +221,47 @@ def get_indices(performer, camera, evaluation='CS'):
         # Get indices of test data
         for idx in test_ids:
             temp = np.where(performer == idx)[0]  # 0-based index
-            test_indices = np.hstack((test_indices, temp)).astype(np.int)
+            test_indices = np.hstack((test_indices, temp)).astype(int)
 
         # Get indices of training data
         for train_id in train_ids:
             temp = np.where(performer == train_id)[0]  # 0-based index
-            train_indices = np.hstack((train_indices, temp)).astype(np.int)
+            train_indices = np.hstack((train_indices, temp)).astype(int)
     else:  # Cross View (Camera IDs)
         train_ids = [2, 3]
         test_ids = 1
         # Get indices of test data
         temp = np.where(camera == test_ids)[0]  # 0-based index
-        test_indices = np.hstack((test_indices, temp)).astype(np.int)
+        test_indices = np.hstack((test_indices, temp)).astype(int)
 
         # Get indices of training data
         for train_id in train_ids:
             temp = np.where(camera == train_id)[0]  # 0-based index
-            train_indices = np.hstack((train_indices, temp)).astype(np.int)
+            train_indices = np.hstack((train_indices, temp)).astype(int)
 
     return train_indices, test_indices
 
 
 if __name__ == '__main__':
-    camera = np.loadtxt(camera_file, dtype=np.int)  # camera id: 1, 2, 3
-    performer = np.loadtxt(performer_file, dtype=np.int)  # subject id: 1~40
-    label = np.loadtxt(label_file, dtype=np.int) - 1  # action label: 0~59
+    camera = np.loadtxt(camera_file, dtype=int)  # camera id: 1, 2, 3
+    performer = np.loadtxt(performer_file, dtype=int)  # subject id: 1~40
+    label = np.loadtxt(label_file, dtype=int) - 1  # action label: 0~59
 
-    frames_cnt = np.loadtxt(frames_file, dtype=np.int)  # frames_cnt
+    frames_cnt = np.loadtxt(frames_file, dtype=int)  # frames_cnt
     skes_name = np.loadtxt(skes_name_file, dtype=np.string_)
 
     with open(raw_skes_joints_pkl, 'rb') as fr:
         skes_joints = pickle.load(fr)  # a list
 
+    print(f"Translating seq")
     skes_joints = seq_translation(skes_joints)
 
-    skes_joints = align_frames(skes_joints, frames_cnt)  # aligned to the same frame length
+    print(f"Aligning seq")
+    # aligned to the same frame length
+    skes_joints = align_frames(skes_joints, frames_cnt)
 
     evaluations = ['CS', 'CV']
     for evaluation in evaluations:
-        split_dataset(skes_joints, label, performer, camera, evaluation, save_path)
+        print(f"Evaluating {evaluation}")
+        split_dataset(skes_joints, label, performer,
+                      camera, evaluation, save_path)
