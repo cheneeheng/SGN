@@ -8,27 +8,19 @@ import logging
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 
-root_path = './'
-stat_path = osp.join(root_path, 'statistics')
-setup_file = osp.join(stat_path, 'setup.txt')
-camera_file = osp.join(stat_path, 'camera.txt')
-performer_file = osp.join(stat_path, 'performer.txt')
-replication_file = osp.join(stat_path, 'replication.txt')
-label_file = osp.join(stat_path, 'label.txt')
-skes_name_file = osp.join(stat_path, 'skes_available_name.txt')
-
-denoised_path = osp.join(root_path, 'denoised_data')
-raw_skes_joints_pkl = osp.join(denoised_path, 'raw_denoised_joints.pkl')
-frames_file = osp.join(denoised_path, 'frames_cnt.txt')
-
-save_path = './processed_data/'
+from typing import Tuple
 
 
-if not osp.exists(save_path):
-    os.mkdir(save_path)
+# WHATS HAPPENING HERE:
+# - load raw data
+# - translate sequence to the real first frame
+# - real first frame is defined by the first non zero frame of actior 1
+# - align/pad the frames with zeros until max number (300)
+# - split datasets
 
-
-def remove_nan_frames(ske_name, ske_joints, nan_logger):
+def remove_nan_frames(ske_name: str,
+                      ske_joints: np.ndarray,
+                      nan_logger: logging.Logger) -> np.ndarray:
     num_frames = ske_joints.shape[0]
     valid_frames = []
 
@@ -43,7 +35,7 @@ def remove_nan_frames(ske_name, ske_joints, nan_logger):
     return ske_joints[valid_frames]
 
 
-def seq_translation(skes_joints):
+def seq_translation(skes_joints: list) -> list:
     for idx, ske_joints in enumerate(tqdm(skes_joints)):
         num_frames = ske_joints.shape[0]
         num_bodies = 1 if ske_joints.shape[1] == 75 else 2
@@ -59,7 +51,8 @@ def seq_translation(skes_joints):
                 break
             i += 1
 
-        origin = np.copy(ske_joints[i, 3:6])  # new origin: joint-2
+        # new origin: joint-2
+        origin = np.copy(ske_joints[i, joint_2[0]:joint_2[1]])
 
         for f in range(num_frames):
             if num_bodies == 1:
@@ -67,6 +60,7 @@ def seq_translation(skes_joints):
             else:  # for 2 actors
                 ske_joints[f] -= np.tile(origin, 50)
 
+        # makes sure the zero frames stay zero frames
         if (num_bodies == 2) and (cnt1 > 0):
             ske_joints[missing_frames_1, :75] = np.zeros(
                 (cnt1, 75), dtype=np.float32)
@@ -80,7 +74,9 @@ def seq_translation(skes_joints):
     return skes_joints
 
 
-def frame_translation(skes_joints, skes_name, frames_cnt):
+def frame_translation(skes_joints: list,
+                      skes_name: str,
+                      frames_cnt: np.ndarray) -> Tuple[list, np.ndarray]:
     nan_logger = logging.getLogger('nan_skes')
     nan_logger.setLevel(logging.INFO)
     nan_logger.addHandler(logging.FileHandler("./nan_frames.log"))
@@ -90,13 +86,13 @@ def frame_translation(skes_joints, skes_name, frames_cnt):
         num_frames = ske_joints.shape[0]
         # Calculate the distance between
         # spine base (joint-1) and spine (joint-21)
-        j1 = ske_joints[:, 0:3]
-        j21 = ske_joints[:, 60:63]
+        j1 = ske_joints[:, joint_1[0]:joint_1[1]]
+        j21 = ske_joints[:, joint_21[0]:joint_21[1]]
         dist = np.sqrt(((j1 - j21) ** 2).sum(axis=1))
 
         for f in range(num_frames):
             # new origin: middle of the spine (joint-2)
-            origin = ske_joints[f, 3:6]
+            origin = ske_joints[f, joint_2[0]:joint_2[1]]
             if (ske_joints[f, 75:] == 0).all():
                 ske_joints[f, :75] = (
                     ske_joints[f, :75] - np.tile(origin, 25)) / \
@@ -113,7 +109,7 @@ def frame_translation(skes_joints, skes_name, frames_cnt):
     return skes_joints, frames_cnt
 
 
-def align_frames(skes_joints, frames_cnt):
+def align_frames(skes_joints: list, frames_cnt: np.ndarray) -> np.ndarray:
     """
     Align all sequences with the same frame length.
 
@@ -135,16 +131,18 @@ def align_frames(skes_joints, frames_cnt):
     return aligned_skes_joints
 
 
-def one_hot_vector(labels):
-    num_skes = len(labels)
-    labels_vector = np.zeros((num_skes, 60))
-    for idx, l in enumerate(labels):
-        labels_vector[idx, l] = 1
+# def one_hot_vector(labels: np.ndarray) -> np.ndarray:
+#     num_skes = len(labels)
+#     labels_vector = np.zeros((num_skes, 60))
+#     for idx, l in enumerate(labels):
+#         labels_vector[idx, l] = 1
 
-    return labels_vector
+#     return labels_vector
 
 
-def split_train_val(train_indices, method='sklearn', ratio=0.05):
+def split_train_val(train_indices: np.ndarray,
+                    method: str = 'sklearn',
+                    ratio: float = 0.05) -> Tuple[np.ndarray, np.ndarray]:
     """
     Get validation set by splitting data randomly from training set
     with two methods.
@@ -164,7 +162,12 @@ def split_train_val(train_indices, method='sklearn', ratio=0.05):
         return train_indices, val_indices
 
 
-def split_dataset(skes_joints, label, performer, camera, evaluation, save_path):
+def split_dataset(skes_joints: list,
+                  label: np.ndarray,
+                  performer: np.ndarray,
+                  camera: np.ndarray,
+                  evaluation: str,
+                  save_path: str):
     train_indices, test_indices = get_indices(performer, camera, evaluation)
     m = 'sklearn'  # 'sklearn' or 'numpy'
     # Select validation set from training set
@@ -208,7 +211,9 @@ def split_dataset(skes_joints, label, performer, camera, evaluation, save_path):
     # h5file.close()
 
 
-def get_indices(performer, camera, evaluation='CS'):
+def get_indices(performer: np.ndarray,
+                camera: np.ndarray,
+                evaluation: str = 'CS') -> Tuple[np.ndarray, np.ndarray]:
     test_indices = np.empty(0)
     train_indices = np.empty(0)
 
@@ -243,6 +248,28 @@ def get_indices(performer, camera, evaluation='CS'):
 
 
 if __name__ == '__main__':
+
+    joint_1 = (0, 3)  # spine base
+    joint_2 = (3, 6)  # middle of the spine
+    joint_21 = (60, 63)  # spine
+
+    root_path = './'
+    stat_path = osp.join(root_path, 'statistics')
+    camera_file = osp.join(stat_path, 'camera.txt')
+    performer_file = osp.join(stat_path, 'performer.txt')
+    label_file = osp.join(stat_path, 'label.txt')
+
+    skes_name_file = osp.join(stat_path, 'skes_available_name.txt')
+
+    denoised_path = osp.join(root_path, 'denoised_data')
+    raw_skes_joints_pkl = osp.join(denoised_path, 'raw_denoised_joints.pkl')
+    frames_file = osp.join(denoised_path, 'frames_cnt.txt')
+
+    save_path = osp.join(root_path, 'processed_data')
+
+    if not osp.exists(save_path):
+        os.mkdir(save_path)
+
     camera = np.loadtxt(camera_file, dtype=int)  # camera id: 1, 2, 3
     performer = np.loadtxt(performer_file, dtype=int)  # subject id: 1~40
     label = np.loadtxt(label_file, dtype=int) - 1  # action label: 0~59
@@ -255,6 +282,9 @@ if __name__ == '__main__':
 
     print(f"Translating seq")
     skes_joints = seq_translation(skes_joints)
+
+    # skes_joints, frames_cnt = frame_translation(skes_joints, skes_name,
+    #                                             frames_cnt)
 
     print(f"Aligning seq")
     # aligned to the same frame length

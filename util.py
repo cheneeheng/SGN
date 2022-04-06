@@ -11,8 +11,7 @@ import os.path as osp
 
 def make_dir(dataset, directory=None):
     if directory is not None:
-        output_dir = output_dir
-
+        output_dir = directory
     else:
         if dataset == 'NTU':
             output_dir = os.path.join('./results/NTU/')

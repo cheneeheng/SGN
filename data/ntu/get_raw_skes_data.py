@@ -7,8 +7,14 @@ import pickle
 import logging
 
 
-def get_raw_bodies_data(skes_path, ske_name, frames_drop_skes,
-                        frames_drop_logger):
+# WHATS HAPPENING HERE:
+# - read raw skeleton data and drop frames with no body
+
+
+def get_raw_bodies_data(skes_path: str,
+                        ske_name: str,
+                        frames_drop_skes: dict,
+                        frames_drop_logger: logging.Logger):
     """
     Get raw bodies data from a skeleton sequence.
 
@@ -26,8 +32,8 @@ def get_raw_bodies_data(skes_path, ske_name, frames_drop_skes,
     """
     ske_file = osp.join(skes_path, ske_name + '.skeleton')
     assert osp.exists(ske_file), 'Error: Skeleton file %s not found' % ske_file
+
     # Read all data from .skeleton file into a list (in string format)
-    # print('Reading data from %s' % ske_file[-29:])
     with open(ske_file, 'r') as fr:
         str_data = fr.readlines()
 
@@ -101,20 +107,7 @@ def get_raw_bodies_data(skes_path, ske_name, frames_drop_skes,
 
 
 def get_raw_skes_data():
-    # # save_path = './data'
-    # # skes_path = '/data/pengfei/NTU/nturgb+d_skeletons/'
-    # stat_path = osp.join(save_path, 'statistics')
-    #
-    # skes_name_file = osp.join(stat_path, 'skes_available_name.txt')
-    # save_data_pkl = osp.join(save_path, 'raw_skes_data.pkl')
-    # frames_drop_pkl = osp.join(save_path, 'frames_drop_skes.pkl')
-    #
-    # frames_drop_logger = logging.getLogger('frames_drop')
-    # frames_drop_logger.setLevel(logging.INFO)
-    # frames_drop_logger.addHandler(
-    #     logging.FileHandler(osp.join(save_path, 'frames_drop.log')))
-    # frames_drop_skes = dict()
-
+    # skeleton filenames
     skes_name = np.loadtxt(skes_name_file, dtype=str)
 
     num_files = skes_name.size
@@ -124,6 +117,7 @@ def get_raw_skes_data():
     frames_cnt = np.zeros(num_files, dtype=int)
 
     for (idx, ske_name) in enumerate(skes_name):
+        # 3 key-value pairs dict
         bodies_data = get_raw_bodies_data(
             skes_path, ske_name, frames_drop_skes, frames_drop_logger)
         raw_skes_data.append(bodies_data)
@@ -132,34 +126,37 @@ def get_raw_skes_data():
             print('Processed: %.2f%% (%d / %d)' %
                   (100.0 * (idx + 1) / num_files, idx + 1, num_files))
 
+    # save list of dict + frame count
     with open(save_data_pkl, 'wb') as fw:
         pickle.dump(raw_skes_data, fw, pickle.HIGHEST_PROTOCOL)
-    np.savetxt(osp.join(save_path, 'raw_data',
-               'frames_cnt.txt'), frames_cnt, fmt='%d')
+    np.savetxt(osp.join(root_path, 'raw_data', 'frames_cnt.txt'),
+               frames_cnt, fmt='%d')
 
     print('Saved raw bodies data into %s' % save_data_pkl)
     print('Total frames: %d' % np.sum(frames_cnt))
 
+    # {skeleton name: [frames dropped]}
     with open(frames_drop_pkl, 'wb') as fw:
         pickle.dump(frames_drop_skes, fw, pickle.HIGHEST_PROTOCOL)
 
 
 if __name__ == '__main__':
-    save_path = './'
+    root_path = './'
 
     skes_path = '../../_data/data/nturgbd_raw/nturgb+d_skeletons/'
-    stat_path = osp.join(save_path, 'statistics')
-    if not osp.exists('./raw_data'):
-        os.makedirs('./raw_data')
+    stat_path = osp.join(root_path, 'statistics')
+    save_path = osp.join(root_path, 'raw_data')
+    if not osp.exists(save_path):
+        os.makedirs(save_path)
 
     skes_name_file = osp.join(stat_path, 'skes_available_name.txt')
-    save_data_pkl = osp.join(save_path, 'raw_data', 'raw_skes_data.pkl')
-    frames_drop_pkl = osp.join(save_path, 'raw_data', 'frames_drop_skes.pkl')
+    save_data_pkl = osp.join(save_path, 'raw_skes_data.pkl')
+    frames_drop_pkl = osp.join(save_path, 'frames_drop_skes.pkl')
 
     frames_drop_logger = logging.getLogger('frames_drop')
     frames_drop_logger.setLevel(logging.INFO)
-    frames_drop_logger.addHandler(logging.FileHandler(
-        osp.join(save_path, 'raw_data', 'frames_drop.log')))
+    frames_drop_logger.addHandler(
+        logging.FileHandler(osp.join(save_path, 'frames_drop.log')))
     frames_drop_skes = dict()
 
     get_raw_skes_data()
