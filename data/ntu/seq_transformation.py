@@ -10,6 +10,8 @@ from tqdm import tqdm
 
 from typing import Tuple
 
+from .preprocess import pre_normalization
+
 
 # WHATS HAPPENING HERE:
 # - load raw data
@@ -253,7 +255,7 @@ if __name__ == '__main__':
     joint_2 = (3, 6)  # middle of the spine
     joint_21 = (60, 63)  # spine
 
-    root_path = './'
+    root_path = './data/ntu'
     stat_path = osp.join(root_path, 'statistics')
     camera_file = osp.join(stat_path, 'camera.txt')
     performer_file = osp.join(stat_path, 'performer.txt')
@@ -261,6 +263,7 @@ if __name__ == '__main__':
 
     skes_name_file = osp.join(stat_path, 'skes_available_name.txt')
 
+    root_path = './_data/data/ntu_sgn'
     denoised_path = osp.join(root_path, 'denoised_data')
     raw_skes_joints_pkl = osp.join(denoised_path, 'raw_denoised_joints.pkl')
     frames_file = osp.join(denoised_path, 'frames_cnt.txt')
@@ -289,6 +292,17 @@ if __name__ == '__main__':
     print(f"Aligning seq")
     # aligned to the same frame length
     skes_joints = align_frames(skes_joints, frames_cnt)
+
+    print(f"AAGCN PRE-NORM")
+    skes_joints = pre_normalization(skes_joints,
+                                    zaxis=[0, 1],
+                                    zaxis2=None,
+                                    xaxis=[8, 4],
+                                    pad=False,
+                                    center=False,
+                                    center_firstframe=False,
+                                    verbose=False,
+                                    tqdm=True)
 
     evaluations = ['CS', 'CV']
     for evaluation in evaluations:
